@@ -6,6 +6,7 @@ import java.util.Random;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.Semaphore;
 // ANSI Color Codes for enhanced terminal output
 class Colors {
     public static final String RESET = "\u001B[0m";
@@ -37,7 +38,7 @@ class SharedResources {
     public static List<String> executionLog = new ArrayList<>();  // Shared list - NEEDS PROTECTION!
     private static final ReentrantLock counterLock = new ReentrantLock();
     private static final ReentrantLock logLock = new ReentrantLock();
-    
+    public static final Semaphore cpuSemaphore = new Semaphore(1);
     // TODO #1: Add a ReentrantLock(s) here to protect critical sections
     // Example: public static final ReentrantLock lock = new ReentrantLock();
     
@@ -116,8 +117,9 @@ class Process implements Runnable {
     public void run() {
         // TODO #3: Acquire CPU semaphore before executing
         // This ensures only allowed number of processes run simultaneously
-        
+        boolean permitAcquired = false;
         try {
+            SharedResources.cpuSemaphore.acquire();
             if (startTime == -1) {
                 startTime = System.currentTimeMillis();
             }
@@ -175,13 +177,19 @@ class Process implements Runnable {
                                   Colors.RESET);
             }
             System.out.println();
-            
+
+        } catch (InterruptedException e) {
+
+        Thread.currentThread().interrupt();
+
+        System.out.println(Colors.RED + "  ✗ " + name + " was interrupted while waiting for CPU." + Colors.RESET);  
         } finally {
             // TODO #4: Release CPU semaphore here
             // Always release in finally block to prevent deadlocks!
-        }
+        if (permitAcquired) {
+            SharedResources.cpuSemaphore.release();        
+            }
     }
-    
     private String createProgressBar(int progress, int width) {
         int filled = (progress * width) / 100;
         StringBuilder bar = new StringBuilder("[");
